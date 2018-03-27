@@ -19,6 +19,11 @@ namespace SkyNoodle.Core.Consumers
 
         private readonly IDictionary<string, List<Action<string>>> _streamFunctions;
 
+        /// <summary>
+        /// Initialises the consumer which will connect to the provided Kafka cluster.
+        /// </summary>
+        /// <param name="brokerList">The brokers of the Kafka cluster that the consumer will connect to</param>
+        /// <param name="consumerGroup">Consumer group that this consumer will use</param>
         public SkyNoodleConsumer(string brokerList, string consumerGroup)
         {
             _streamProcessors = new Dictionary<string, List<IStreamProcessor>>();
@@ -44,8 +49,19 @@ namespace SkyNoodle.Core.Consumers
             _consumer.OnPartitionsRevoked += OnPartitionsRevoked;
         }
 
+        /// <summary>
+        /// Adds/Replaces the function associated with the MessageType
+        /// </summary>
+        /// <param name="messageType">MessageType that will trigger the function</param>
+        /// <param name="streamFunction">The function which will be invoked when the MessageType is received</param>
+        /// <returns></returns>
         public SkyNoodleConsumer WithStreamProcessor(string messageType, Action<string> streamFunction)
         {
+            if (_streamFunctions.ContainsKey(messageType))
+            {
+                _streamFunctions[messageType] = new List<Action<string>>() { streamFunction };
+                return this;
+            }
             if (_streamFunctions.TryAdd(messageType, new List<Action<string>> { streamFunction }))
             {
                 return this;
@@ -55,8 +71,19 @@ namespace SkyNoodle.Core.Consumers
             return this;
         }
 
+        /// <summary>
+        /// Adds/Replaces the processor associated with the MessageType
+        /// </summary>
+        /// <param name="messageType">MessageType that will trigger the processor</param>
+        /// <param name="streamProcessor">The processor which will be invoked when the MessageType is received</param>
+        /// <returns></returns>
         public SkyNoodleConsumer WithStreamProcessor(string messageType, IStreamProcessor streamProcessor)
         {
+            if (_streamProcessors.ContainsKey(messageType))
+            {
+                _streamProcessors[messageType] = new List<IStreamProcessor>() { streamProcessor };
+                return this;
+            }
             if (_streamProcessors.TryAdd(messageType, new List<IStreamProcessor> { streamProcessor }))
             {
                 return this;
@@ -66,17 +93,35 @@ namespace SkyNoodle.Core.Consumers
             return this;
         }
 
+        /// <summary>
+        /// Sets the list of topics that the consumer will listen to
+        /// This operation is not accumulative. It replaces the current list of topics.
+        /// </summary>
+        /// <param name="topics">List of topics on the kafka cluster that the consumer will listen to</param>
+        /// <returns></returns>
         public SkyNoodleConsumer WithTopics(IEnumerable<string> topics)
         {
             _consumer.Subscribe(topics);
             return this;
         }
+
+        /// <summary>
+        /// Sets the topic that the consumer will listen to
+        /// This operation is not accumulative. It replaces the current list of topics being listened to.
+        /// </summary>
+        /// <param name="topic">The topic on the kafka cluster that the consumer will listen to</param>
+        /// <returns></returns>
         public SkyNoodleConsumer WithTopics(string topic)
         {
             _consumer.Subscribe(topic);
             return this;
         }
 
+        /// <summary>
+        /// A method which will read a message regardless of message type, and invoke a stream or processor associated with it
+        /// If no messages are on the queue, or the next message is not a supported message type, the method will simply return
+        /// </summary>
+        /// <param name="timeout"></param>
         public void ReceiveMessage(TimeSpan timeout)
         {
             if (!_consumer.Consume(out var message, timeout))
