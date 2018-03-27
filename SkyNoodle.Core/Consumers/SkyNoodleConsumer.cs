@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Confluent.Kafka;
 using Confluent.Kafka.Serialization;
@@ -12,20 +13,18 @@ namespace SkyNoodle.Core.Consumers
 {
     public class SkyNoodleConsumer : IDisposable
     {
-        private readonly Dictionary<string, object> _config;
         private readonly Consumer<string, ScramJetMessage> _consumer;
 
-        private readonly IDictionary<string, IStreamProcessor> _streamProcessors;
+        private readonly IDictionary<string, List<IStreamProcessor>> _streamProcessors;
 
-        // Not sure
-        private readonly IDictionary<string, Action<string>> _streamFunctions;
+        private readonly IDictionary<string, List<Action<string>>> _streamFunctions;
 
         public SkyNoodleConsumer(string brokerList, string consumerGroup)
         {
-            _streamProcessors = new Dictionary<string, IStreamProcessor>();
-            _streamFunctions = new Dictionary<string, Action<string>>();
+            _streamProcessors = new Dictionary<string, List<IStreamProcessor>>();
+            _streamFunctions = new Dictionary<string, List<Action<string>>>();
 
-            _config = new Dictionary<string, object>()
+            var config = new Dictionary<string, object>()
             {
                 { "bootstrap.servers", brokerList },
                 { "group.id", consumerGroup },
@@ -38,7 +37,7 @@ namespace SkyNoodle.Core.Consumers
                 }
             };
 
-            _consumer = new Consumer<string, ScramJetMessage>(_config, new StringDeserializer(Encoding.UTF8), new ScramJetFormatDeserialiser());
+            _consumer = new Consumer<string, ScramJetMessage>(config, new StringDeserializer(Encoding.UTF8), new ScramJetFormatDeserialiser());
             _consumer.OnError += OnError;
             _consumer.OnConsumeError += OnConsumeError;
             _consumer.OnPartitionsAssigned += OnPartitionsAssigned;
@@ -47,7 +46,7 @@ namespace SkyNoodle.Core.Consumers
 
         public SkyNoodleConsumer WithStreamProcessor(string messageType, Action<string> streamFunction)
         {
-            if (_streamFunctions.TryAdd(messageType, streamFunction))
+            if (_streamFunctions.TryAdd(messageType, new List<Action<string>> { streamFunction }))
             {
                 return this;
             }
@@ -56,30 +55,25 @@ namespace SkyNoodle.Core.Consumers
             return this;
         }
 
-        public SkyNoodleConsumer WithTopics(params string[] topics)
-        {
-            _consumer.Subscribe(topics);
-            return this;
-        }
-
-        private void OnConsumeError(object sender, Message e)
-        {
-            Console.Error.WriteLine($"{e}");
-        }
-
-        private void OnError(object sender, Error e)
-        {
-            Console.Error.WriteLine($"{e}");
-        }
-
         public SkyNoodleConsumer WithStreamProcessor(string messageType, IStreamProcessor streamProcessor)
         {
-            if (_streamProcessors.TryAdd(messageType, streamProcessor))
+            if (_streamProcessors.TryAdd(messageType, new List<IStreamProcessor> { streamProcessor }))
             {
                 return this;
             }
 
             Console.Error.WriteLine($"Failed to add stream processor assigned to MessageType: {messageType}");
+            return this;
+        }
+
+        public SkyNoodleConsumer WithTopics(IEnumerable<string> topics)
+        {
+            _consumer.Subscribe(topics);
+            return this;
+        }
+        public SkyNoodleConsumer WithTopics(string topic)
+        {
+            _consumer.Subscribe(topic);
             return this;
         }
 
@@ -94,14 +88,26 @@ namespace SkyNoodle.Core.Consumers
 
             if (_streamProcessors.TryGetValue(messagetype, out var streamProcessor))
             {
-                streamProcessor.ProcessMessage(message.Value.Payload.ToString());
+                var payload = message.Value.Payload.ToString();
+                streamProcessor.ForEach(processor => processor.ProcessMessage(payload));
                 return;
             }
 
             if (_streamFunctions.TryGetValue(messagetype, out var streamFunction))
             {
-                streamFunction.Invoke(message.Value.Payload.ToString());
+                var payload = message.Value.Payload.ToString();
+                streamFunction.ForEach(function => function.Invoke(payload));
             }
+        }
+
+        private void OnConsumeError(object sender, Message e)
+        {
+            Console.Error.WriteLine($"{e}");
+        }
+
+        private void OnError(object sender, Error e)
+        {
+            Console.Error.WriteLine($"{e}");
         }
 
         private void OnPartitionsRevoked(object sender, List<TopicPartition> partitions)
@@ -120,7 +126,6 @@ namespace SkyNoodle.Core.Consumers
         {
             _consumer?.Dispose();
         }
-
 
     }
 }
