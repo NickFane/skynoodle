@@ -8,7 +8,7 @@ using SkyNoodle.Core.Models;
 
 namespace SkyNoodle.Core.Serialization
 {
-    public class ScramJetFormatDeserialiser : IDeserializer<ScramJetMessage>
+    internal class ScramJetFormatDeserialiser : IDeserializer<ScramJetMessage>
     {
         public ScramJetMessage Deserialize(string topic, byte[] data)
         {

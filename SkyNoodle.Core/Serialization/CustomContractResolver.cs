@@ -7,7 +7,7 @@ using Newtonsoft.Json.Serialization;
 
 namespace SkyNoodle.Core.Serialization
 {
-    public class CustomContractResolver : DefaultContractResolver
+    internal class CustomContractResolver : DefaultContractResolver
     {
         public bool UseJsonPropertyName { get; }
 
