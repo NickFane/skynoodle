@@ -62,12 +62,8 @@ namespace SkyNoodle.Core.Consumers
                 _streamFunctions[messageType] = new List<Action<string>>() { streamFunction };
                 return this;
             }
-            if (_streamFunctions.TryAdd(messageType, new List<Action<string>> { streamFunction }))
-            {
-                return this;
-            }
 
-            Console.WriteLine($"Failed to add stream processor assigned to MessageType: {messageType}");
+            _streamFunctions.Add(messageType, new List<Action<string>> { streamFunction });
             return this;
         }
 
@@ -84,12 +80,8 @@ namespace SkyNoodle.Core.Consumers
                 _streamProcessors[messageType] = new List<IStreamProcessor>() { streamProcessor };
                 return this;
             }
-            if (_streamProcessors.TryAdd(messageType, new List<IStreamProcessor> { streamProcessor }))
-            {
-                return this;
-            }
 
-            Console.Error.WriteLine($"Failed to add stream processor assigned to MessageType: {messageType}");
+            _streamProcessors.Add(messageType, new List<IStreamProcessor> { streamProcessor });
             return this;
         }
 
